@@ -55,7 +55,7 @@ def test_absolute_url_must_stay_on_api_base_origin() -> None:
 
 
 def test_token_never_appears_in_auth_error() -> None:
-    secret = "ghp_SUPERSECRETVALUE"
+    secret = "test-token-value"
     with StubServer(
         lambda request: Response.json({"message": "Bad credentials"}, status=401)
     ) as server:
@@ -66,7 +66,7 @@ def test_token_never_appears_in_auth_error() -> None:
 
 
 def test_token_never_appears_in_rate_limit_error() -> None:
-    secret = "ghp_SUPERSECRETVALUE"
+    secret = "test-token-value"
     with StubServer(
         lambda request: Response.json(
             {"message": "rate limit"},
