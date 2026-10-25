@@ -1,0 +1,15 @@
+__pycache__/
+*.py[cod]
+.venv/
+.venv*/
+venv/
+build/
+dist/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+events.jsonl
+demo-events.jsonl
+.agent/
+AGENTS.md

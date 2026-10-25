@@ -1,0 +1,27 @@
+# Minimal config: watch one repository for the `bug` label and append matches to a log.
+github:
+  token_env: GITHUB_TOKEN  # optional for public repos; set for higher rate limits
+  api_base: https://api.github.com
+
+poll:
+  interval_seconds: 300
+  lookback_hours: 24
+  max_pages: 5
+  timeout_seconds: 10
+
+state_file: ~/.local/state/label-notify/cursor.json
+
+repos:
+  - pallets/flask
+
+rules:
+  - name: bug-watch
+    labels: [bug]
+    type: any        # issue | pr | any
+    state: any       # open | closed | any
+    deliver: [events-log]
+
+deliveries:
+  events-log:
+    kind: jsonl
+    path: ./events.jsonl

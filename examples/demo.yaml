@@ -1,0 +1,26 @@
+# Demo config used for the live dry-run (L3). One page, wide lookback window.
+github:
+  api_base: https://api.github.com
+
+poll:
+  interval_seconds: 300
+  lookback_hours: 720
+  max_pages: 1
+  timeout_seconds: 15
+
+state_file: ~/.local/state/label-notify/demo-cursor.json
+
+repos:
+  - microsoft/vscode
+
+rules:
+  - name: bug-watch
+    labels: [bug]
+    type: issue
+    state: any
+    deliver: [events-log]
+
+deliveries:
+  events-log:
+    kind: jsonl
+    path: ./demo-events.jsonl
