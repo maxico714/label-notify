@@ -102,6 +102,21 @@ def test_token_reads_environment(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
         (lambda data: data.update(poll={"timeout_seconds": 0}), "timeout_seconds"),
         (lambda data: data.update(poll={"max_pages": 0}), "max_pages"),
         (lambda data: data.update(github={"api_base": "http://example.com"}), "api_base"),
+        (
+            lambda data: data.update(github={"api_base": "http://localhost.evil.example"}),
+            "api_base",
+        ),
+        (
+            lambda data: data.update(github={"api_base": "http://127.0.0.1@evil.example"}),
+            "api_base",
+        ),
+        (lambda data: data.update(github=[1]), "github must be a mapping"),
+        (lambda data: data.update(poll=[1]), "poll must be a mapping"),
+        (lambda data: data.update(poll={"interval_seconds": "nope"}), "must be an integer"),
+        (lambda data: data.update(poll={"timeout_seconds": "nope"}), "must be a number"),
+        (lambda data: data.update(poll={"timeout_seconds": float("nan")}), "finite"),
+        (lambda data: data.update(poll={"timeout_seconds": float("inf")}), "finite"),
+        (lambda data: data.update(poll={"interval_seconds": True}), "must be an integer"),
     ],
 )
 def test_invalid_configs_raise(tmp_path: Path, mutate, message: str) -> None:
@@ -145,3 +160,19 @@ def test_webhook_localhost_allowed(tmp_path: Path) -> None:
     data["rules"][0]["deliver"] = ["hook"]
     config = load_config(write_config(tmp_path, data))
     assert config.deliveries["hook"].kind == "webhook"
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://localhost.evil.example/hook",
+        "http://127.0.0.1.evil.example/hook",
+        "http://127.0.0.1@evil.example/hook",
+    ],
+)
+def test_webhook_loopback_lookalikes_are_rejected(tmp_path: Path, url: str) -> None:
+    data = base_config()
+    data["deliveries"]["hook"] = {"kind": "webhook", "url": url}
+    data["rules"][0]["deliver"] = ["hook"]
+    with pytest.raises(ConfigError, match="webhook url must be https"):
+        load_config(write_config(tmp_path, data))

@@ -43,6 +43,33 @@ def test_insecure_api_base_is_rejected() -> None:
         GitHubClient("http://example.com")
 
 
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://localhost.evil.example",
+        "http://127.0.0.1.evil.example",
+        "http://127.0.0.1@evil.example",
+        "http://localhost@evil.example",
+        "http://127.0.0.1:80@evil.example",
+    ],
+)
+def test_loopback_exception_does_not_cover_lookalike_hosts(url: str) -> None:
+    with pytest.raises(GuardError, match="must use https"):
+        GitHubClient(url, token="token-123")
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://localhost.evil.example/hook",
+        "http://127.0.0.1@evil.example/hook",
+    ],
+)
+def test_webhook_rejects_loopback_lookalike_hosts(url: str) -> None:
+    with pytest.raises(GuardError, match="webhook url must use https"):
+        post_json(url, {})
+
+
 def test_absolute_url_must_stay_on_api_base_origin() -> None:
     client = GitHubClient("https://api.github.com")
     for url in (

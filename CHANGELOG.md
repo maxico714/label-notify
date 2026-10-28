@@ -4,6 +4,20 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Security
+
+- The plain-HTTP loopback exception now compares the parsed hostname exactly. Prefix
+  matches such as `http://localhost.evil.example` and `http://127.0.0.1@evil.example`
+  are rejected, so a malformed `api_base` cannot send the bearer token over plaintext
+  to a remote host.
+
+### Fixed
+
+- Non-mapping `github` / `poll` sections and non-numeric or non-finite `poll` values now
+  raise `ConfigError` (exit 1) instead of an uncaught traceback.
+
 ## [0.1.0] - 2026-10-25
 
 First source release. Not published to PyPI.

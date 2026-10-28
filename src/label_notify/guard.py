@@ -45,6 +45,24 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
 
 _OPENER = urllib.request.build_opener(_NoRedirect())
 
+_LOCAL_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
+
+
+def allowed_transport(url: str) -> bool:
+    """True for https, or plain http only on an exact loopback host.
+
+    Matching the hostname instead of the URL prefix matters: `http://localhost.evil.com`
+    and `http://127.0.0.1@evil.com` are remote hosts, not loopback aliases.
+    """
+    try:
+        parts = urllib.parse.urlsplit(url)
+        hostname = parts.hostname
+    except ValueError:
+        return False
+    if parts.scheme == "https":
+        return True
+    return parts.scheme == "http" and hostname in _LOCAL_HOSTS
+
 
 class GitHubClient:
     """GET-only GitHub client. Any other verb is rejected before a socket opens."""
@@ -64,20 +82,18 @@ class GitHubClient:
 
     @staticmethod
     def _check_base(url: str) -> None:
-        local = url.startswith(
-            ("http://127.0.0.1", "http://localhost", "https://127.0.0.1", "https://localhost")
-        )
-        if not (url.startswith("https://") or local):
+        if not allowed_transport(url):
             raise GuardError("api_base must use https (localhost is allowed for tests)")
 
     def _check_same_origin(self, url: str) -> None:
         base = urllib.parse.urlsplit(self.api_base)
         target = urllib.parse.urlsplit(url)
-        if (target.scheme, target.hostname, target.port) != (
-            base.scheme,
-            base.hostname,
-            base.port,
-        ):
+        try:
+            target_origin = (target.scheme, target.hostname, target.port)
+            base_origin = (base.scheme, base.hostname, base.port)
+        except ValueError:
+            raise GuardError("invalid URL") from None
+        if target_origin != base_origin:
             raise GuardError("absolute URLs must stay on the configured api_base host")
 
     def get(self, path: str, params: Mapping[str, Any] | None = None) -> tuple[Any, dict[str, str]]:
@@ -138,8 +154,7 @@ class GitHubClient:
 
 def post_json(url: str, payload: Mapping[str, Any], timeout: float = 10.0) -> None:
     """Deliver a webhook payload. HTTPS only (localhost is allowed for tests)."""
-    local = url.startswith(("http://127.0.0.1", "http://localhost"))
-    if not (url.startswith("https://") or local):
+    if not allowed_transport(url):
         raise GuardError("webhook url must use https (localhost is allowed for tests)")
     data = json.dumps(dict(payload)).encode("utf-8")
     request = urllib.request.Request(url, data=data, method="POST")

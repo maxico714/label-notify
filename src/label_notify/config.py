@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import math
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 import yaml
+
+from .guard import allowed_transport
 
 
 class ConfigError(ValueError):
@@ -54,6 +57,30 @@ def _require(mapping: dict[str, Any], key: str, where: str) -> Any:
     return mapping[key]
 
 
+def _section(data: dict[str, Any], key: str) -> dict[str, Any]:
+    value = data.get(key, {}) or {}
+    if not isinstance(value, dict):
+        raise ConfigError(f"config: {key} must be a mapping")
+    return value
+
+
+def _integer(section: dict[str, Any], key: str, default: int, where: str) -> int:
+    value = section.get(key, default)
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ConfigError(f"config: {where}.{key} must be an integer")
+    return value
+
+
+def _positive_float(section: dict[str, Any], key: str, default: float, where: str) -> float:
+    value = section.get(key, default)
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ConfigError(f"config: {where}.{key} must be a number")
+    number = float(value)
+    if not math.isfinite(number) or number <= 0:
+        raise ConfigError(f"config: {where}.{key} must be positive and finite")
+    return number
+
+
 def _delivery(name: str, raw: dict[str, Any]) -> Delivery:
     kind = str(_require(raw, "kind", f"delivery '{name}'")).lower()
     options = {key: value for key, value in raw.items() if key != "kind"}
@@ -61,11 +88,7 @@ def _delivery(name: str, raw: dict[str, Any]) -> Delivery:
         _require(options, "path", f"delivery '{name}'")
     elif kind == "webhook":
         url = str(_require(options, "url", f"delivery '{name}'"))
-        if not (
-            url.startswith("https://")
-            or url.startswith("http://127.0.0.1")
-            or url.startswith("http://localhost")
-        ):
+        if not allowed_transport(url):
             raise ConfigError(
                 f"delivery '{name}': webhook url must be https (or localhost for tests)"
             )
@@ -145,29 +168,24 @@ def load_config(path: Path) -> Config:
                 raise ConfigError(f"rule '{rule.name}': unknown delivery '{delivery_name}'")
         rules.append(rule)
 
-    github = data.get("github", {}) or {}
-    poll = data.get("poll", {}) or {}
+    github = _section(data, "github")
+    poll = _section(data, "poll")
     state_file = Path(
         str(data.get("state_file", "~/.local/state/label-notify/cursor.json"))
     ).expanduser()
 
     api_base = str(github.get("api_base", "https://api.github.com")).rstrip("/")
-    if not (
-        api_base.startswith("https://")
-        or api_base.startswith(("http://127.0.0.1", "http://localhost"))
-    ):
+    if not allowed_transport(api_base):
         raise ConfigError("github.api_base must use https (localhost is allowed for tests)")
 
-    interval = int(poll.get("interval_seconds", 300))
-    lookback = int(poll.get("lookback_hours", 24))
-    timeout = float(poll.get("timeout_seconds", 10))
-    max_pages = int(poll.get("max_pages", 5))
+    interval = _integer(poll, "interval_seconds", 300, "poll")
+    lookback = _integer(poll, "lookback_hours", 24, "poll")
+    timeout = _positive_float(poll, "timeout_seconds", 10.0, "poll")
+    max_pages = _integer(poll, "max_pages", 5, "poll")
     if interval <= 0:
         raise ConfigError("poll.interval_seconds must be positive")
     if lookback <= 0:
         raise ConfigError("poll.lookback_hours must be positive")
-    if timeout <= 0:
-        raise ConfigError("poll.timeout_seconds must be positive")
     if max_pages < 1:
         raise ConfigError("poll.max_pages must be at least 1")
 
